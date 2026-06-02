@@ -6,6 +6,8 @@ const generateFile = require("./generateFile");
 const generateInputFile = require("./generateInputFile");
 const executeCpp = require("./executeCpp");
 const generateAiResponse = require("./generateAiResponse");
+const DBConnection = require("./config/db");
+const Job = require("./models/Job");
 
 app.use(cors());
 app.use(express.json());
@@ -19,19 +21,61 @@ app.post("/run", async (req, res) => {
         return res.status(400).json({ error: "Empty code" });
     }
 
+    let job;
     try {
+        // STEP 1: Create a Job in the database immediately
+        job = await new Job({
+            language,
+            startedAt: new Date(),
+        }).save();
+
+        // STEP 2: Send the jobId back to the frontend immediately (Don't wait for execution!)
+        const jobId = job._id;
+        res.status(201).json({ success: true, jobId });
+
+        // STEP 3: Execute the code in the background
         const filepath = generateFile(language, code);
         const inputFilePath = generateInputFile(input);
+        
+        job.filePath = filepath;
+        job.inputFilePath = inputFilePath;
+        await job.save();
+
         const output = await executeCpp(filepath, inputFilePath);
+        
+        // STEP 4: Update the database with the final output
+        job.completedAt = new Date();
+        job.status = "success";
+        job.output = output;
+        await job.save();
 
-        res.json({ output });
-    }
-    catch (error) {
+    } catch (error) {
         console.log(error);
-        return res.status(500).json({ success: false, error: error.message });
+        if (job) {
+            job.completedAt = new Date();
+            job.status = "error";
+            job.output = JSON.stringify(error.message || error);
+            await job.save();
+        }
     }
+});
 
-})
+// STEP 5: The frontend will constantly call this route to ask "Is the job done yet?"
+app.get("/status/:jobId", async (req, res) => {
+    const jobId = req.params.jobId;
+    if (!jobId) {
+        return res.status(400).json({ success: false, error: "Missing jobId!" });
+    }
+    try {
+        const job = await Job.findById(jobId);
+        if (!job) {
+            return res.status(404).json({ success: false, error: "Job not found." });
+        }
+        return res.status(200).json({ success: true, job });
+    } catch (error) {
+        return res.status(500).json({ success: false, error: JSON.stringify(error) });
+    }
+});
 
 app.post("/ai-review", async (req, res) => {
     const { code } = req.body;
@@ -51,7 +95,18 @@ app.post("/ai-review", async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 8000;
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
+const InitializeConnection = async () => {
+    try {
+        await DBConnection();
+        const PORT = process.env.PORT || 8000;
+        app.listen(PORT, () => {
+            console.log(`Server is running on port ${PORT}`);
+        });
+    } catch (error) {
+        console.error("CRITICAL: Initialization failed. Server did not start.");
+        console.error(error);
+        process.exit(1);
+    }
+}
+
+InitializeConnection();

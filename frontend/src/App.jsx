@@ -35,12 +35,36 @@ int main() {
     };
 
     try {
+      // 1. Send code to backend, get jobId immediately
       const runUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000/run';
       const { data } = await axios.post(runUrl, payload);
-      setOutput(data.output);
+      
+      const jobId = data.jobId;
+
+      // 2. Start "Polling": Ask the backend every 1 second if the code is done
+      let pollInterval = setInterval(async () => {
+          try {
+              const statusUrl = `http://localhost:8000/status/${jobId}`;
+              const { data: statusData } = await axios.get(statusUrl);
+              const jobStatus = statusData.job.status;
+              
+              if (jobStatus === "success" || jobStatus === "error") {
+                  // 3. If done, stop asking (clearInterval) and show the output!
+                  clearInterval(pollInterval);
+                  setOutput(statusData.job.output);
+                  setIsRunning(false);
+              } else {
+                  setOutput('Execution pending... Checking status...');
+              }
+          } catch (pollError) {
+              clearInterval(pollInterval);
+              setOutput('Error fetching status: ' + pollError.message);
+              setIsRunning(false);
+          }
+      }, 1000);
+      
     } catch (error) {
       setOutput('Error executing code, error: ' + error.message);
-    } finally {
       setIsRunning(false);
     }
   };
