@@ -8,6 +8,7 @@ const executeCpp = require("./executeCpp");
 const generateAiResponse = require("./generateAiResponse");
 const DBConnection = require("./config/db");
 const Job = require("./models/Job");
+const { addJobToQueue } = require("./jobQueue");
 
 app.use(cors());
 app.use(express.json());
@@ -33,21 +34,19 @@ app.post("/run", async (req, res) => {
         const jobId = job._id;
         res.status(201).json({ success: true, jobId });
 
-        // STEP 3: Execute the code in the background
+        // STEP 3: Generate files and add job to the Redis Queue
         const filepath = generateFile(language, code);
-        const inputFilePath = generateInputFile(input);
+        let inputFilePath;
+        if (input) {
+            inputFilePath = generateInputFile(input);
+        }
         
         job.filePath = filepath;
         job.inputFilePath = inputFilePath;
         await job.save();
 
-        const output = await executeCpp(filepath, inputFilePath);
-        
-        // STEP 4: Update the database with the final output
-        job.completedAt = new Date();
-        job.status = "success";
-        job.output = output;
-        await job.save();
+        await addJobToQueue(jobId);
+        // We are DONE here! The Worker will pick it up from the queue and run it.
 
     } catch (error) {
         console.log(error);
