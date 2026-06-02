@@ -9,8 +9,8 @@ import 'prismjs/themes/prism.css';
 import axios from 'axios';
 import './App.css';
 
-function App() {
-  const [code, setCode] = useState(`#include <iostream>
+const defaultCodes = {
+  cpp: `#include <iostream>
 using namespace std;
 
 int main() {
@@ -19,7 +19,44 @@ int main() {
     sum = num1 + num2;
     cout << "The sum of the two numbers is: " << sum;
     return 0;
-}`);
+}`,
+  c: `#include <stdio.h>
+
+int main() {
+    int num1, num2, sum;
+    scanf("%d %d", &num1, &num2);
+    sum = num1 + num2;
+    printf("The sum of the two numbers is: %d", sum);
+    return 0;
+}`,
+  py: `num1 = int(input())
+num2 = int(input())
+print(f"The sum of the two numbers is: {num1 + num2}")`,
+  java: `import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        int num1 = scanner.nextInt();
+        int num2 = scanner.nextInt();
+        int sum = num1 + num2;
+        System.out.println("The sum of the two numbers is: " + sum);
+    }
+}`,
+  js: `const fs = require('fs');
+const input = fs.readFileSync(0, 'utf-8').trim().split(/\\s+/);
+if (input.length >= 2 && input[0]) {
+  const num1 = parseInt(input[0]);
+  const num2 = parseInt(input[1]);
+  console.log("The sum of the two numbers is: " + (num1 + num2));
+} else {
+  console.log("Hello JavaScript!");
+}`
+};
+
+function App() {
+  const [language, setLanguage] = useState('cpp');
+  const [code, setCode] = useState(defaultCodes['cpp']);
   const [input, setInput] = useState('');
   const [output, setOutput] = useState('');
   const [aiReview, setAiReview] = useState('');
@@ -29,7 +66,7 @@ int main() {
   const handleRun = async () => {
     setIsRunning(true);
     const payload = {
-      language: 'cpp',
+      language,
       code,
       input
     };
@@ -93,7 +130,23 @@ int main() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Code Editor Section */}
         <div className="bg-white shadow-lg rounded-lg p-4 h-full flex flex-col">
-          <h2 className="text-xl font-semibold text-gray-700 mb-3">Code Editor</h2>
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="text-xl font-semibold text-gray-700">Code Editor</h2>
+            <select 
+              value={language}
+              onChange={(e) => {
+                setLanguage(e.target.value);
+                setCode(defaultCodes[e.target.value]);
+              }}
+              className="px-3 py-1 border border-gray-300 rounded-md text-sm outline-none focus:border-blue-500"
+            >
+              <option value="cpp">C++</option>
+              <option value="c">C</option>
+              <option value="py">Python</option>
+              <option value="java">Java</option>
+              <option value="js">JavaScript</option>
+            </select>
+          </div>
           <div className="bg-gray-100 rounded-lg overflow-y-auto flex-grow" style={{ height: '500px' }}>
             <Editor
               value={code}

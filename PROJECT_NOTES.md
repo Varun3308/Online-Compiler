@@ -45,3 +45,25 @@ Now, when a user submits code, the API Server just tosses their `jobId` into the
    - **Why:** This is a brand new, standalone Node.js file. It listens to the Redis queue, pulls a job out, fetches the code from MongoDB, runs the heavy C++ compiler, and saves the output back to MongoDB. By running this separately, it gets its own CPU resources and protects the main API server.
 4. **Added `concurrently` to `package.json`**
    - **Why:** Since you now have two completely separate programs (the API Server AND the Worker), you normally have to open two terminal windows to run them. The `concurrently` package lets `npm run dev` start both of them at the exact same time automatically!
+
+
+   
+
+## 3. Multi-Language Support & Modular Architecture
+
+**The Problem:**
+Initially, the backend only supported C++ and the code for executing, generating files, and handling API routes were all floating in the main backend folder. This made it difficult to scale and add support for new languages like Python or Java.
+
+**The Solution:**
+We restructured the entire backend to follow an Enterprise-level Model-View-Controller (MVC) style layout and added full support for 5 different languages.
+
+### How it was implemented
+
+1. **Created `backend/controllers/`**
+   - **Why:** To keep the code clean, we created a separate controller for every single language (`executeC.js`, `executeCpp.js`, `executePy.js`, `executeJava.js`, `executeJs.js`). We also updated them to use `child_process.spawn()` instead of `exec()`. `spawn` handles streaming data, meaning it will never crash if the user's code produces a massive amount of output.
+2. **Created `backend/utils/generateFile.js`**
+   - **Why:** We combined the logic for creating code files and input files into one utility. We also added advanced Regex logic for **Java**. Since Java requires the physical filename to match the `public class` name, our utility automatically modifies the user's Java code to append the unique `jobId` to the class name, ensuring successful compilation.
+3. **Updated the Worker (`jobWorker.js`)**
+   - **Why:** We added a `switch` statement to the Worker. Now, when it pulls a job from the queue, it checks `job.language` and dynamically calls the correct controller.
+4. **Added Language Dropdown to Frontend (`App.jsx`)**
+   - **Why:** We updated the UI to let the user select their language. We also mapped a dictionary of `defaultCodes` so that when a user switches languages, the code editor instantly populates with a working "Hello World" boilerplate for that specific language!

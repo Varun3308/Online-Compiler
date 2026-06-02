@@ -18,10 +18,16 @@ const connection = require("./config/redis");// Redis stores the queue so API se
 const { Worker } = require("bullmq");
 const mongoose = require("mongoose");
 require("dotenv").config();
-const executeCpp = require("./executeCpp");
+const executeCpp = require("./controllers/executeCpp");
+const executeC = require("./controllers/executeC");
+const executePy = require("./controllers/executePy");
+const executeJava = require("./controllers/executeJava");
+const executeJs = require("./controllers/executeJs");
 const Job = require("./models/Job");
 const fs = require("fs");
 const path = require("path");
+
+const outputPath = path.join(process.cwd(), "temp", "outputs");
 
 const connectDB = async () => {
   try {
@@ -57,15 +63,37 @@ const worker = new Worker(jobQueueName, async (job) => {
       return;
     }
 
+    let outputFilePath;
+    if (jobFind.language === "java") {
+      const className = path.basename(jobFind.filePath).replace(".java", "");
+      outputFilePath = path.join(outputPath, `${className}.class`);
+    } else if (jobFind.language === "c" || jobFind.language === "cpp") {
+      outputFilePath = path.join(outputPath, `${jobId}.out`);
+    }
+
     console.log("Processing job with ID:", jobId);
 
     try {
       let output;
 
-      if (jobFind.language === "cpp") {
-        output = await executeCpp(jobFind.filePath, jobFind.inputFilePath);
-      } else {
-        throw new Error(`Unsupported language: ${jobFind.language}`);
+      switch (jobFind.language) {
+        case "cpp":
+          output = await executeCpp(jobFind.filePath, jobFind.inputFilePath);
+          break;
+        case "c":
+          output = await executeC(jobFind.filePath, jobFind.inputFilePath);
+          break;
+        case "py":
+          output = await executePy(jobFind.filePath, jobFind.inputFilePath);
+          break;
+        case "java":
+          output = await executeJava(jobFind.filePath, jobFind.inputFilePath);
+          break;
+        case "js":
+          output = await executeJs(jobFind.filePath, jobFind.inputFilePath);
+          break;
+        default:
+          throw new Error(`Unsupported language: ${jobFind.language}`);
       }
 
       jobFind.completedAt = new Date();
@@ -84,11 +112,7 @@ const worker = new Worker(jobQueueName, async (job) => {
       // Clean up files
       if (jobFind.filePath) safeUnlink(jobFind.filePath);
       if (jobFind.inputFilePath) safeUnlink(jobFind.inputFilePath);
-      
-      const outPath = path.join(__dirname, `outputs/${jobId}.out`);
-      const exePath = path.join(__dirname, `outputs/${jobId}.exe`);
-      safeUnlink(outPath);
-      safeUnlink(exePath);
+      if (outputFilePath) safeUnlink(outputFilePath);
     }
   },
   {
