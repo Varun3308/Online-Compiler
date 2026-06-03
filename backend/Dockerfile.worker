@@ -1,0 +1,46 @@
+FROM node:22-slim
+
+WORKDIR /app
+
+# Install all compilers (Java, C++, Python)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    dumb-init \
+    g++ \
+    gcc \
+    python3 \
+    default-jdk-headless \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json* ./
+RUN npm install
+
+COPY . .
+
+
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+CMD ["npm", "run", "start:worker"]
+
+
+# Worker Container
+# Reads Job From Queue
+#        ↓
+# Compiles Code
+#        ↓
+# Runs Code
+#        ↓
+# Updates MongoDB
+
+# Needs:
+
+# BullMQ Worker
+# Mongoose Client
+# Redis Client
+# g++
+# gcc
+# javac
+# python3
+
+# Connects to:
+
+# MongoDB Container
+# Redis Container

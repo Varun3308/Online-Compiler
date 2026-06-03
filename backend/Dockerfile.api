@@ -1,0 +1,128 @@
+# Base image for the container.
+# Think: "Start with a Linux machine that already has Node.js 22 installed."
+# 'slim' version is smaller because it contains fewer extra packages.
+FROM node:22-slim
+
+
+# Set the working directory inside the container.
+# All future commands will run inside /app.
+#
+# Equivalent:
+# mkdir /app
+# cd /app
+WORKDIR /app
+
+
+# Install dumb-init.
+#
+# Why?
+# Node.js often runs as PID 1 inside containers.
+# PID 1 does not handle Linux signals and zombie processes well.
+#
+# dumb-init acts as a tiny process manager:
+#
+# Docker
+#   ↓
+# dumb-init
+#   ↓
+# node index.js
+#
+# This allows graceful shutdown when Docker stops the container.
+#
+# rm -rf /var/lib/apt/lists/*
+# removes apt cache files to keep the image size small.
+# dumb-init is a lightweight process manager that sits in front of your Node.js app inside a
+# Docker container and ensures child processes and shutdown signals are handled correctly.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    dumb-init \
+    && rm -rf /var/lib/apt/lists/*
+
+
+# Copy package.json and package-lock.json first.
+#
+# Why not copy the whole project immediately?
+#
+# Docker caches layers.- it uses the old layer of package.json and package lock
+# If only your source code changes, Docker can reuse the npm install layer.
+#
+# This makes future builds much faster.
+COPY package.json package-lock.json* ./
+
+
+# Install all Node.js dependencies.
+#
+# Equivalent:
+# npm install
+#
+# This creates:
+# /app/node_modules
+#if unchanged - cached layer used(prev)
+RUN npm install
+
+
+# Copy the rest of the project files.
+#
+# Examples:
+# index.js
+# routes/
+# controllers/
+# models/
+# config/
+#
+# Now the container has the complete application code.
+COPY . .
+
+
+# Document that this application listens on port 8000.
+#
+# This does NOT actually open the port.
+# It simply tells Docker and other developers:
+#
+# "This app expects traffic on port 8000."
+#
+# Your Node app probably contains:
+# app.listen(8000)
+EXPOSE 8000
+
+
+# Run dumb-init as the container's first process.
+#
+# Container Start
+#      ↓
+# dumb-init
+#      ↓
+#    CMD
+#
+# Helps with proper signal handling and cleanup.
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+
+
+# Default command executed when the container starts.
+#
+# Equivalent terminal command:
+#
+# node index.js
+#
+# This starts your Express server.
+CMD ["node", "index.js"]
+
+
+# API Container
+# Receives Requests
+#        ↓
+# Creates Job Record
+#        ↓
+# Pushes Job To Queue
+#        ↓
+# Returns jobId
+
+# Needs:
+# Express
+# Mongoose Client
+# Redis Client
+# BullMQ Producer
+
+# Connects to:
+
+# MongoDB Container
+# Redis Container

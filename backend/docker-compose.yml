@@ -1,0 +1,64 @@
+services:
+
+  # API Container
+  # Handles HTTP requests from frontend.
+  # Creates jobs in MongoDB and pushes them to BullMQ queue.
+  api:
+    build:
+      context: .                 # Current project directory
+      dockerfile: Dockerfile.api # Use API Dockerfile
+
+    container_name: compiler-api
+    restart: always             # Auto restart if container crashes
+
+    ports:
+      - "8000:8000"             # Host Port : Container Port
+
+    environment:
+      - PORT=8000
+      - MONGO_URI=${MONGO_URI}  # MongoDB connection string
+      - REDIS_HOST=redis        # Redis hostname inside Docker network
+      - GEMINI_KEY=${GEMINI_KEY}
+
+    # Share temp folder between host and container
+    volumes:
+      - ./temp:/app/temp
+
+    # Start Redis before starting API
+    depends_on:
+      - redis
+
+
+  # Worker Container
+  # Listens to BullMQ queue and executes code submissions.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker # Contains compilers (g++, Java, Python)
+
+    container_name: compiler-worker
+    restart: always
+
+    # Start BullMQ worker process
+    command: npm run start:worker
+
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - REDIS_HOST=redis
+      - GEMINI_KEY=${GEMINI_KEY}
+
+    # Share same temp folder used by API
+    volumes:
+      - ./temp:/app/temp
+
+    # Start Redis before worker
+    depends_on:
+      - redis
+
+
+  # Redis Container
+  # Stores BullMQ queues (waiting, active, completed jobs)
+  redis:
+    image: redis:alpine         # Official lightweight Redis image
+    container_name: compiler-redis
+    restart: always
